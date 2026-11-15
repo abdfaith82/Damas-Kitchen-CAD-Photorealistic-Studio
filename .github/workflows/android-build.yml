@@ -5,99 +5,28 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      JAVA_VERSION: 17                # <-- use JDK 17, matches compileOptions
-      ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
-      GRADLE_OPTS: "-Dorg.gradle.daemon=false"
-
+      JAVA_VERSION: "17"
+      GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout repository
+      - name: Checkout Code
         uses: actions/checkout@v4
-
-      # 2️⃣ Set up JDK
-      - name: Set up JDK ${{ env.JAVA_VERSION }}
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
-
-      # 3️⃣ Cache Android SDK
-      - name: Cache Android SDK
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.ANDROID_SDK_ROOT }}
-          key: android-sdk-${{ runner.os }}-${{ hashFiles('**/android-build.yml') }}
-          restore-keys: |
-            android-sdk-${{ runner.os }}-
-
-      # 4️⃣ Install Android SDK command‑line tools
-      - name: Install Android SDK command‑line tools
-        run: |
-          mkdir -p "${ANDROID_SDK_ROOT}"
-          curl -fo "${ANDROID_SDK_ROOT}/cmdline-tools.zip" \
-               https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-          unzip -q "${ANDROID_SDK_ROOT}/cmdline-tools.zip" -d "${ANDROID_SDK_ROOT}"
-          # The zip extracts to a folder named “cmdline-tools”. Move it to the
-          # expected location “cmdline-tools/latest”.
-          mv "${ANDROID_SDK_ROOT}/cmdline-tools" "${ANDROID_SDK_ROOT}/cmdline-tools-temp"
-          mkdir -p "${ANDROID_SDK_ROOT}/cmdline-tools/latest"
-          mv "${ANDROID_SDK_ROOT}/cmdline-tools-temp"/* "${ANDROID_SDK_ROOT}/cmdline-tools/latest/"
-          rm -rf "${ANDROID_SDK_ROOT}/cmdline-tools-temp" "${ANDROID_SDK_ROOT}/cmdline-tools.zip"
-
-          # Add binaries to PATH for the remaining steps
-          echo "${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin" >> $GITHUB_PATH
-          echo "${ANDROID_SDK_ROOT}/platform-tools" >> $GITHUB_PATH
-
-      # 5️⃣ Verify sdkmanager is reachable (helps debug path issues)
-      - name: Verify sdkmanager command
-        run: |
-          which sdkmanager
-          sdkmanager --version
-
-      # 6️⃣ Accept Android SDK licenses
-      - name: Accept Android SDK licenses
-        run: |
-          yes | sdkmanager --licenses
-
-      # 7️⃣ Install required SDK packages (no deprecated “tools” package)
-      - name: Install SDK packages
-        run: |
-          sdkmanager \
-            "platforms;android-34" \
-            "build-tools;34.0.0" \
-            "platform-tools" \
-            "cmdline-tools;latest"
-
-      # 8️⃣ Verify the installed components
-      - name: Verify SDK installation
-        run: |
-          sdkmanager --list | grep -E "platforms;android-34|build-tools;34.0.0|platform-tools|cmdline-tools;latest"
-
-      # 9️⃣ Cache Gradle wrapper & dependencies
-      - name: Cache Gradle
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-
-
-      # 🔟 Build the app
+          java-version: 17
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
       - name: Build Debug APK
-        run: |
-          ./gradlew clean assembleDebug --no-daemon
-
-      # 1️⃣1️⃣ Upload the generated APK as an artifact
+        run: gradle assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug.apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
